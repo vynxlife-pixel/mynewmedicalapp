@@ -1,0 +1,1565 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Practice Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script><!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    .tab-button {
+      transition: all 0.2s ease;
+    }
+    
+    .tab-button.active {
+      border-bottom: 3px solid;
+    }
+    
+    .card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .loading {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    .spinner {
+      border: 2px solid #f3f4f6;
+      border-top: 2px solid #1e40af;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      margin-left: 8px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .prescription-pad {
+      background: white;
+      border: 2px solid #1e40af;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .settings-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background-color: #1e40af;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease;
+    }
+
+    .settings-btn:hover {
+      transform: scale(1.1);
+    }
+
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-content {
+      background-color: white;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90%;
+      overflow-y: auto;
+    }
+
+    .sync-indicator {
+      position: fixed;
+      bottom: 90px;
+      right: 24px;
+      background-color: white;
+      padding: 12px 20px;
+      border-radius: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 100;
+    }
+
+    .sync-indicator.syncing {
+      color: #1e40af;
+    }
+
+    .sync-indicator.synced {
+      color: #10b981;
+    }
+
+    .sync-indicator.error {
+      color: #ef4444;
+    }
+
+    @media print {
+      .prescription-pad {
+        border: 1px solid #000;
+      }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+  <script src="/_sdk/element_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full flex flex-col overflow-auto" style="background-color: #f8fafc;"><!-- Header -->
+   <header class="w-full" style="background-color: #1e40af; color: white; padding: 24px;">
+    <div style="max-width: 1400px; margin: 0 auto;">
+     <h1 id="practice-name" style="font-size: 28px; font-weight: 700; margin-bottom: 4px;">Medical Practice Manager</h1>
+     <p id="doctor-info" style="font-size: 14px; opacity: 0.9; margin-bottom: 2px;">Dr. Smith • General Practice</p>
+     <div style="display: flex; gap: 24px; font-size: 13px; opacity: 0.85; margin-top: 6px;"><span id="clinic-address">📍 123 Medical St, City</span> <span id="clinic-phone">📞 +91 98765 43210</span>
+     </div>
+    </div>
+   </header><!-- Navigation Tabs -->
+   <nav class="w-full" style="background-color: white; border-bottom: 1px solid #e5e7eb; padding: 0 24px;">
+    <div style="max-width: 1400px; margin: 0 auto; display: flex; gap: 32px; overflow-x: auto;"><button class="tab-button active" data-tab="patients" style="padding: 16px 0; font-weight: 600; color: #1e40af; background: none; border: none; cursor: pointer; border-bottom-color: #1e40af; white-space: nowrap;"> 👥 Patients </button> <button class="tab-button" data-tab="appointments" style="padding: 16px 0; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; white-space: nowrap;"> 📅 Appointments </button> <button class="tab-button" data-tab="tasks" style="padding: 16px 0; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; white-space: nowrap;"> ✓ Tasks </button> <button class="tab-button" data-tab="prescriptions" style="padding: 16px 0; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; white-space: nowrap;"> 📝 Prescriptions </button> <button class="tab-button" data-tab="pharmacy" style="padding: 16px 0; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; white-space: nowrap;"> 💊 Pharmacy </button> <button class="tab-button" data-tab="billing" style="padding: 16px 0; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; white-space: nowrap;"> 💰 Billing </button> <button class="tab-button" data-tab="analytics" style="padding: 16px 0; font-weight: 600; color: #6b7280; background: none; border: none; cursor: pointer; white-space: nowrap;"> 📊 Analytics </button>
+    </div>
+   </nav><!-- Main Content -->
+   <main class="w-full flex-1" style="padding: 24px;">
+    <div style="max-width: 1400px; margin: 0 auto;"><!-- Patients Tab -->
+     <section id="patients-tab" class="tab-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+       <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Patient Records</h2><button id="add-patient-btn" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;"> + Add Patient </button>
+      </div>
+      <div id="patient-form" style="display: none; background-color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111827;">New Patient</h3>
+       <form id="patient-form-element">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="patient-name" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Patient Name *</label> <input type="text" id="patient-name" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="patient-age" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Age *</label> <input type="number" id="patient-age" required min="0" max="150" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="patient-contact" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Contact Number *</label> <input type="tel" id="patient-contact" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="patient-email" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Email</label> <input type="email" id="patient-email" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="patient-address" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Address</label> <input type="text" id="patient-address" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="patient-blood-group" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Blood Group</label> <select id="patient-blood-group" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"> <option value="">Select...</option> <option value="A+">A+</option> <option value="A-">A-</option> <option value="B+">B+</option> <option value="B-">B-</option> <option value="AB+">AB+</option> <option value="AB-">AB-</option> <option value="O+">O+</option> <option value="O-">O-</option> </select>
+         </div>
+         <div><label for="patient-allergies" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Known Allergies</label> <input type="text" id="patient-allergies" placeholder="e.g., Penicillin, Peanuts" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="patient-notes" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Medical Notes</label> <textarea id="patient-notes" rows="2" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+        <div style="display: flex; gap: 12px;"><button type="submit" id="save-patient-btn" style="background-color: #10b981; color: white; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Save Patient </button> <button type="button" id="cancel-patient-btn" style="background-color: #e5e7eb; color: #374151; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Cancel </button>
+        </div>
+       </form>
+      </div>
+      <div id="patients-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px;"></div>
+      <div id="patients-empty" style="text-align: center; padding: 48px; color: #9ca3af;">
+       <div style="font-size: 48px; margin-bottom: 16px;">
+        👥
+       </div>
+       <p style="font-size: 16px;">No patients yet. Add your first patient to get started!</p>
+      </div>
+     </section><!-- Appointments Tab -->
+     <section id="appointments-tab" class="tab-content" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+       <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Appointments</h2><button id="add-appointment-btn" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;"> + Schedule Appointment </button>
+      </div>
+      <div id="appointment-form" style="display: none; background-color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111827;">New Appointment</h3>
+       <form id="appointment-form-element">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="appointment-patient" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Patient Name</label> <input type="text" id="appointment-patient" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="appointment-date" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Date</label> <input type="date" id="appointment-date" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="appointment-time" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Time</label> <input type="time" id="appointment-time" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="appointment-status" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Status</label> <select id="appointment-status" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"> <option value="scheduled">Scheduled</option> <option value="completed">Completed</option> <option value="cancelled">Cancelled</option> </select>
+         </div>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="appointment-reason" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Reason for Visit</label> <textarea id="appointment-reason" rows="2" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+        <div style="display: flex; gap: 12px;"><button type="submit" id="save-appointment-btn" style="background-color: #10b981; color: white; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Save Appointment </button> <button type="button" id="cancel-appointment-btn" style="background-color: #e5e7eb; color: #374151; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Cancel </button>
+        </div>
+       </form>
+      </div>
+      <div id="appointments-list" style="display: grid; gap: 12px;"></div>
+      <div id="appointments-empty" style="text-align: center; padding: 48px; color: #9ca3af;">
+       <div style="font-size: 48px; margin-bottom: 16px;">
+        📅
+       </div>
+       <p style="font-size: 16px;">No appointments scheduled. Create your first appointment!</p>
+      </div>
+     </section><!-- Tasks Tab -->
+     <section id="tasks-tab" class="tab-content" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+       <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Daily Tasks</h2><button id="add-task-btn" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;"> + Add Task </button>
+      </div>
+      <div id="task-form" style="display: none; background-color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111827;">New Task</h3>
+       <form id="task-form-element">
+        <div style="margin-bottom: 16px;"><label for="task-description" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Task Description</label> <input type="text" id="task-description" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="task-priority" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Priority</label> <select id="task-priority" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"> <option value="high">High</option> <option value="medium">Medium</option> <option value="low">Low</option> </select>
+         </div>
+         <div><label for="task-due-date" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Due Date</label> <input type="date" id="task-due-date" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: flex; gap: 12px;"><button type="submit" id="save-task-btn" style="background-color: #10b981; color: white; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Save Task </button> <button type="button" id="cancel-task-btn" style="background-color: #e5e7eb; color: #374151; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Cancel </button>
+        </div>
+       </form>
+      </div>
+      <div id="tasks-list" style="display: grid; gap: 12px;"></div>
+      <div id="tasks-empty" style="text-align: center; padding: 48px; color: #9ca3af;">
+       <div style="font-size: 48px; margin-bottom: 16px;">
+        ✓
+       </div>
+       <p style="font-size: 16px;">No tasks yet. Add your first task to stay organized!</p>
+      </div>
+     </section><!-- Prescriptions Tab -->
+     <section id="prescriptions-tab" class="tab-content" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+       <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Prescriptions</h2><button id="add-prescription-btn" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;"> + Create Prescription </button>
+      </div>
+      <div id="prescription-form" style="display: none; background-color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111827;">New Prescription</h3>
+       <form id="prescription-form-element">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="prescription-patient" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Patient Name</label> <input type="text" id="prescription-patient" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="prescription-date" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Date</label> <input type="date" id="prescription-date" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="prescription-diagnosis" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Diagnosis</label> <textarea id="prescription-diagnosis" required rows="2" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="prescription-medicines" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Medicines</label> <textarea id="prescription-medicines" required rows="3" placeholder="e.g., Paracetamol 500mg - Twice daily" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="prescription-instructions" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Additional Instructions</label> <textarea id="prescription-instructions" rows="2" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+        <div style="display: flex; gap: 12px;"><button type="submit" id="save-prescription-btn" style="background-color: #10b981; color: white; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Save Prescription </button> <button type="button" id="cancel-prescription-btn" style="background-color: #e5e7eb; color: #374151; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Cancel </button>
+        </div>
+       </form>
+      </div>
+      <div id="prescriptions-list" style="display: grid; gap: 12px;"></div>
+      <div id="prescriptions-empty" style="text-align: center; padding: 48px; color: #9ca3af;">
+       <div style="font-size: 48px; margin-bottom: 16px;">
+        📝
+       </div>
+       <p style="font-size: 16px;">No prescriptions yet. Create your first prescription!</p>
+      </div>
+     </section><!-- Pharmacy Tab -->
+     <section id="pharmacy-tab" class="tab-content" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+       <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Pharmacy Inventory</h2><button id="add-medicine-btn" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;"> + Add Medicine </button>
+      </div>
+      <div id="medicine-form" style="display: none; background-color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111827;">Add Medicine to Inventory</h3>
+       <form id="medicine-form-element">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="medicine-name" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Medicine Name *</label> <input type="text" id="medicine-name" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-generic" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Generic Name</label> <input type="text" id="medicine-generic" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="medicine-manufacturer" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Manufacturer</label> <input type="text" id="medicine-manufacturer" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-supplier" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Supplier</label> <input type="text" id="medicine-supplier" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="medicine-batch" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Batch Number</label> <input type="text" id="medicine-batch" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-quantity" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Quantity *</label> <input type="number" id="medicine-quantity" required min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-reorder" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Reorder Level *</label> <input type="number" id="medicine-reorder" required min="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="medicine-price" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Unit Price (₹) *</label> <input type="number" id="medicine-price" required min="0" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-category" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Category *</label> <select id="medicine-category" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"> <option value="">Select...</option> <option value="antibiotic">Antibiotic</option> <option value="painkiller">Painkiller</option> <option value="antiviral">Antiviral</option> <option value="cardiac">Cardiac</option> <option value="diabetes">Diabetes</option> <option value="vitamin">Vitamin/Supplement</option> <option value="respiratory">Respiratory</option> <option value="gastrointestinal">Gastrointestinal</option> <option value="other">Other</option> </select>
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="medicine-manufacture-date" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Manufacture Date</label> <input type="date" id="medicine-manufacture-date" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-expiry" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Expiry Date</label> <input type="date" id="medicine-expiry" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="medicine-storage" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Storage Location</label> <input type="text" id="medicine-storage" placeholder="e.g., Shelf A3" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="display: flex; gap: 12px;"><button type="submit" id="save-medicine-btn" style="background-color: #10b981; color: white; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Save Medicine </button> <button type="button" id="cancel-medicine-btn" style="background-color: #e5e7eb; color: #374151; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Cancel </button>
+        </div>
+       </form>
+      </div>
+      <div id="medicines-list" style="display: grid; gap: 12px;"></div>
+      <div id="medicines-empty" style="text-align: center; padding: 48px; color: #9ca3af;">
+       <div style="font-size: 48px; margin-bottom: 16px;">
+        💊
+       </div>
+       <p style="font-size: 16px;">No medicines in inventory. Add your first medicine!</p>
+      </div>
+     </section><!-- Billing Tab -->
+     <section id="billing-tab" class="tab-content" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+       <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Billing &amp; Invoices</h2><button id="add-invoice-btn" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer;"> + Create Invoice </button>
+      </div>
+      <div id="invoice-form" style="display: none; background-color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #111827;">Create Invoice</h3>
+       <form id="invoice-form-element">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="invoice-number" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Invoice Number *</label> <input type="text" id="invoice-number" required placeholder="e.g., INV-001" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="invoice-date" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Invoice Date *</label> <input type="date" id="invoice-date" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="margin-bottom: 16px;"><label for="invoice-patient" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Patient Name *</label> <input type="text" id="invoice-patient" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+        </div>
+        <div style="margin-bottom: 16px;"><label for="invoice-description" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Services / Description *</label> <textarea id="invoice-description" required rows="2" placeholder="e.g., Consultation fee, Lab tests, Medicine charges" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; resize: vertical;"></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="invoice-subtotal" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Subtotal (₹) *</label> <input type="number" id="invoice-subtotal" required min="0" step="0.01" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="invoice-tax" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Tax (₹)</label> <input type="number" id="invoice-tax" min="0" step="0.01" value="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+         <div><label for="invoice-discount" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Discount (₹)</label> <input type="number" id="invoice-discount" min="0" step="0.01" value="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+         </div>
+        </div>
+        <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+         <div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-size: 16px; font-weight: 700; color: #111827;">Total Amount:</span> <span id="invoice-total-display" style="font-size: 24px; font-weight: 700; color: #1e40af;">₹0.00</span>
+         </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+         <div><label for="invoice-status" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Payment Status *</label> <select id="invoice-status" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"> <option value="unpaid">Unpaid</option> <option value="partial">Partially Paid</option> <option value="paid">Paid</option> </select>
+         </div>
+         <div><label for="invoice-payment-method" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Payment Method</label> <select id="invoice-payment-method" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;"> <option value="">Select...</option> <option value="cash">Cash</option> <option value="credit_card">Credit Card</option> <option value="debit_card">Debit Card</option> <option value="insurance">Insurance</option> <option value="check">Check</option> <option value="bank_transfer">Bank Transfer</option> <option value="upi">UPI</option> </select>
+         </div>
+        </div>
+        <div id="partial-payment-section" style="display: none; margin-bottom: 16px;"><label for="invoice-amount-paid" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Amount Paid (₹)</label> <input type="number" id="invoice-amount-paid" min="0" step="0.01" value="0" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+        </div>
+        <div style="display: flex; gap: 12px;"><button type="submit" id="save-invoice-btn" style="background-color: #10b981; color: white; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Save Invoice </button> <button type="button" id="cancel-invoice-btn" style="background-color: #e5e7eb; color: #374151; padding: 10px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;"> Cancel </button>
+        </div>
+       </form>
+      </div>
+      <div id="invoices-list" style="display: grid; gap: 12px;"></div>
+      <div id="invoices-empty" style="text-align: center; padding: 48px; color: #9ca3af;">
+       <div style="font-size: 48px; margin-bottom: 16px;">
+        💰
+       </div>
+       <p style="font-size: 16px;">No invoices yet. Create your first invoice!</p>
+      </div>
+     </section><!-- Analytics Tab -->
+     <section id="analytics-tab" class="tab-content" style="display: none;">
+      <h2 style="font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 24px;">Practice Analytics</h2><!-- Summary Cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 32px;">
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #1e40af;">
+        <div style="font-size: 14px; color: #6b7280; font-weight: 600; margin-bottom: 8px;">
+         Total Patients
+        </div>
+        <div id="stat-total-patients" style="font-size: 32px; font-weight: 700; color: #111827;">
+         0
+        </div>
+       </div>
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #10b981;">
+        <div style="font-size: 14px; color: #6b7280; font-weight: 600; margin-bottom: 8px;">
+         This Month's Appointments
+        </div>
+        <div id="stat-monthly-appointments" style="font-size: 32px; font-weight: 700; color: #111827;">
+         0
+        </div>
+       </div>
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #f59e0b;">
+        <div style="font-size: 14px; color: #6b7280; font-weight: 600; margin-bottom: 8px;">
+         Total Revenue
+        </div>
+        <div id="stat-total-revenue" style="font-size: 32px; font-weight: 700; color: #111827;">
+         ₹0
+        </div>
+       </div>
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #ef4444;">
+        <div style="font-size: 14px; color: #6b7280; font-weight: 600; margin-bottom: 8px;">
+         Outstanding Payments
+        </div>
+        <div id="stat-outstanding" style="font-size: 32px; font-weight: 700; color: #111827;">
+         ₹0
+        </div>
+       </div>
+      </div><!-- Charts Row 1 -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 16px;">Appointments by Status</h3>
+        <div id="appointments-by-status" style="display: flex; flex-direction: column; gap: 12px;"></div>
+       </div>
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 16px;">Payment Status</h3>
+        <div id="payment-status-chart" style="display: flex; flex-direction: column; gap: 12px;"></div>
+       </div>
+      </div><!-- Charts Row 2 -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 16px;">Tasks by Priority</h3>
+        <div id="tasks-by-priority" style="display: flex; flex-direction: column; gap: 12px;"></div>
+       </div>
+       <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 16px;">Medicine Categories</h3>
+        <div id="medicine-by-category" style="display: flex; flex-direction: column; gap: 12px;"></div>
+       </div>
+      </div><!-- Inventory Alerts -->
+      <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 24px;">
+       <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 16px;">Inventory Alerts</h3>
+       <div id="inventory-alerts"></div>
+      </div><!-- Recent Activity -->
+      <div style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+       <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 16px;">Recent Activity (Last 7 Days)</h3>
+       <div id="recent-activity" style="display: flex; flex-direction: column; gap: 12px;"></div>
+      </div>
+     </section>
+    </div>
+   </main>
+  </div><!-- Sync Indicator -->
+  <div id="sync-indicator" class="sync-indicator synced" style="display: none;"><span id="sync-icon">✓</span> <span id="sync-text">Synced</span>
+  </div><!-- Settings Button --> <button id="settings-btn" class="settings-btn">⚙️</button> <!-- Settings Modal -->
+  <div id="settings-modal" class="modal" style="display: none;">
+   <div class="modal-content">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+     <h2 style="font-size: 24px; font-weight: 700; color: #111827;">Practice Settings</h2><button id="close-settings-btn" style="background-color: #e5e7eb; color: #374151; padding: 8px 16px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer;">Close</button>
+    </div>
+    <form id="settings-form">
+     <div style="margin-bottom: 24px;">
+      <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin-bottom: 16px;">Practice Information</h3>
+      <div style="margin-bottom: 16px;"><label for="setting-practice-name" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Practice Name</label> <input type="text" id="setting-practice-name" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+      <div style="margin-bottom: 16px;"><label for="setting-doctor-info" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Doctor Information</label> <input type="text" id="setting-doctor-info" placeholder="Dr. Smith • General Practice" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+     </div>
+     <div style="margin-bottom: 24px;">
+      <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin-bottom: 16px;">Clinic Details</h3>
+      <div style="margin-bottom: 16px;"><label for="setting-clinic-address" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Clinic Address</label> <input type="text" id="setting-clinic-address" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+      <div style="margin-bottom: 16px;"><label for="setting-clinic-phone" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Contact Number</label> <input type="tel" id="setting-clinic-phone" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+     </div>
+     <div style="margin-bottom: 24px;">
+      <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin-bottom: 16px;">Prescription Pad Settings</h3>
+      <div style="margin-bottom: 16px;"><label for="setting-clinic-name" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Clinic Name on Prescription</label> <input type="text" id="setting-clinic-name" placeholder="City Medical Clinic" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+      <div style="margin-bottom: 16px;"><label for="setting-doctor-name" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Doctor Name</label> <input type="text" id="setting-doctor-name" placeholder="Dr. John Smith" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+      <div style="margin-bottom: 16px;"><label for="setting-doctor-qualifications" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Qualifications</label> <input type="text" id="setting-doctor-qualifications" placeholder="MBBS, MD" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+      <div style="margin-bottom: 16px;"><label for="setting-registration-number" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Registration Number</label> <input type="text" id="setting-registration-number" placeholder="MCI Reg: 12345" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+      <div style="margin-bottom: 16px;"><label for="setting-prescription-footer" style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">Prescription Footer</label> <input type="text" id="setting-prescription-footer" placeholder="For any queries, please contact the clinic" style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+      </div>
+     </div><button type="submit" style="background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 6px; font-weight: 600; border: none; cursor: pointer; width: 100%;"> Save Settings </button>
+    </form>
+   </div>
+  </div>
+  <script>
+    // Firebase Configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDpTZnnkKjuVsupy-tToBPINj5n7W5eYHc",
+      authDomain: "studio-696331417-e4fd4.firebaseapp.com",
+      projectId: "studio-696331417-e4fd4",
+      storageBucket: "studio-696331417-e4fd4.firebasestorage.app",
+      messagingSenderId: "291282078034",
+      appId: "1:291282078034:web:b6731681d51d3cc896128b"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Collections
+    const dataCollection = db.collection('medicalPracticeData');
+    const settingsCollection = db.collection('practiceSettings');
+
+    // Sync indicator
+    function showSyncStatus(status) {
+      const indicator = document.getElementById('sync-indicator');
+      const icon = document.getElementById('sync-icon');
+      const text = document.getElementById('sync-text');
+      
+      indicator.style.display = 'flex';
+      indicator.className = 'sync-indicator ' + status;
+      
+      if (status === 'syncing') {
+        icon.innerHTML = '⟳';
+        text.textContent = 'Syncing...';
+      } else if (status === 'synced') {
+        icon.innerHTML = '✓';
+        text.textContent = 'Synced';
+        setTimeout(() => {
+          indicator.style.display = 'none';
+        }, 2000);
+      } else if (status === 'error') {
+        icon.innerHTML = '⚠';
+        text.textContent = 'Sync Error';
+      }
+    }
+
+    // Settings management
+    const defaultSettings = {
+      practice_name: "Medical Practice Manager",
+      doctor_info: "Dr. Smith • General Practice",
+      clinic_address: "123 Medical St, City",
+      clinic_phone: "+91 98765 43210",
+      clinic_name: "City Medical Clinic",
+      doctor_name: "Dr. John Smith",
+      doctor_qualifications: "MBBS, MD",
+      registration_number: "MCI Reg: 12345",
+      prescription_footer: "For any queries, please contact the clinic"
+    };
+
+    let settings = {...defaultSettings};
+
+    // Load settings from Firebase
+    async function loadSettings() {
+      try {
+        const doc = await settingsCollection.doc('main').get();
+        if (doc.exists) {
+          settings = doc.data();
+        }
+        updateUIWithSettings();
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        updateUIWithSettings();
+      }
+    }
+
+    // Save settings to Firebase
+    async function saveSettings() {
+      try {
+        showSyncStatus('syncing');
+        await settingsCollection.doc('main').set(settings);
+        showSyncStatus('synced');
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        showSyncStatus('error');
+      }
+    }
+
+    function updateUIWithSettings() {
+      document.getElementById('practice-name').textContent = settings.practice_name;
+      document.getElementById('doctor-info').textContent = settings.doctor_info;
+      document.getElementById('clinic-address').textContent = '📍 ' + settings.clinic_address;
+      document.getElementById('clinic-phone').textContent = '📞 ' + settings.clinic_phone;
+      
+      document.getElementById('setting-practice-name').value = settings.practice_name;
+      document.getElementById('setting-doctor-info').value = settings.doctor_info;
+      document.getElementById('setting-clinic-address').value = settings.clinic_address;
+      document.getElementById('setting-clinic-phone').value = settings.clinic_phone;
+      document.getElementById('setting-clinic-name').value = settings.clinic_name;
+      document.getElementById('setting-doctor-name').value = settings.doctor_name;
+      document.getElementById('setting-doctor-qualifications').value = settings.doctor_qualifications;
+      document.getElementById('setting-registration-number').value = settings.registration_number;
+      document.getElementById('setting-prescription-footer').value = settings.prescription_footer;
+      
+      renderPrescriptions();
+    }
+
+    // Settings modal handlers
+    document.getElementById('settings-btn').addEventListener('click', () => {
+      document.getElementById('settings-modal').style.display = 'flex';
+    });
+
+    document.getElementById('close-settings-btn').addEventListener('click', () => {
+      document.getElementById('settings-modal').style.display = 'none';
+    });
+
+    document.getElementById('settings-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'settings-modal') {
+        document.getElementById('settings-modal').style.display = 'none';
+      }
+    });
+
+    document.getElementById('settings-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      settings = {
+        practice_name: document.getElementById('setting-practice-name').value,
+        doctor_info: document.getElementById('setting-doctor-info').value,
+        clinic_address: document.getElementById('setting-clinic-address').value,
+        clinic_phone: document.getElementById('setting-clinic-phone').value,
+        clinic_name: document.getElementById('setting-clinic-name').value,
+        doctor_name: document.getElementById('setting-doctor-name').value,
+        doctor_qualifications: document.getElementById('setting-doctor-qualifications').value,
+        registration_number: document.getElementById('setting-registration-number').value,
+        prescription_footer: document.getElementById('setting-prescription-footer').value
+      };
+      
+      await saveSettings();
+      updateUIWithSettings();
+      document.getElementById('settings-modal').style.display = 'none';
+      showToast('Settings saved successfully');
+    });
+
+    // Data management
+    let allData = [];
+
+    // Real-time listener for data
+    dataCollection.onSnapshot((snapshot) => {
+      allData = [];
+      snapshot.forEach((doc) => {
+        allData.push({
+          firebaseId: doc.id,
+          ...doc.data()
+        });
+      });
+      renderAll();
+    }, (error) => {
+      console.error('Error listening to data:', error);
+      showToast('Error syncing data', 'error');
+    });
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.style.backgroundColor = type === 'success' ? '#10b981' : '#ef4444';
+      toast.style.color = 'white';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function getByType(type) {
+      return allData.filter(item => item.__type === type);
+    }
+
+    async function deleteItem(id) {
+      const item = allData.find(item => item.id === id);
+      if (item && item.firebaseId) {
+        try {
+          showSyncStatus('syncing');
+          await dataCollection.doc(item.firebaseId).delete();
+          showSyncStatus('synced');
+          showToast('Item deleted successfully');
+        } catch (error) {
+          console.error('Error deleting item:', error);
+          showSyncStatus('error');
+          showToast('Error deleting item', 'error');
+        }
+      }
+    }
+
+    function renderPatients() {
+      const patients = getByType('patient');
+      const list = document.getElementById('patients-list');
+      const empty = document.getElementById('patients-empty');
+      
+      if (patients.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+      
+      list.style.display = 'grid';
+      empty.style.display = 'none';
+      
+      list.innerHTML = patients.map(patient => `
+        <div class="card" style="background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <h3 style="font-size: 18px; font-weight: 700; color: #111827;">${patient.patientName}</h3>
+                ${patient.bloodGroup ? `<span style="background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">${patient.bloodGroup}</span>` : ''}
+              </div>
+              <p style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">👤 Age: ${patient.age} • 📞 ${patient.contact}</p>
+              ${patient.email ? `<p style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">📧 ${patient.email}</p>` : ''}
+              ${patient.address ? `<p style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">📍 ${patient.address}</p>` : ''}
+              ${patient.allergies ? `<div style="background-color: #fef3c7; border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 4px; margin-top: 8px;"><p style="font-size: 12px; color: #92400e; font-weight: 600;">⚠️ Allergies: ${patient.allergies}</p></div>` : ''}
+            </div>
+            <button onclick="deleteItem(${patient.id})" style="background-color: #fee2e2; color: #991b1b; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;">
+              Delete
+            </button>
+          </div>
+          ${patient.notes ? `<p style="font-size: 14px; color: #374151; margin-top: 8px; padding-top: 12px; border-top: 1px solid #e5e7eb;">${patient.notes}</p>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function renderAppointments() {
+      const appointments = getByType('appointment');
+      const list = document.getElementById('appointments-list');
+      const empty = document.getElementById('appointments-empty');
+      
+      if (appointments.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+      
+      list.style.display = 'grid';
+      empty.style.display = 'none';
+      
+      const sortedAppointments = [...appointments].sort((a, b) => 
+        new Date(a.appointmentDate + ' ' + a.appointmentTime) - new Date(b.appointmentDate + ' ' + b.appointmentTime)
+      );
+      
+      list.innerHTML = sortedAppointments.map(apt => `
+        <div class="card" style="background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">
+                <h3 style="font-size: 18px; font-weight: 700; color: #111827;">${apt.patientName}</h3>
+                <span style="background-color: ${apt.status === 'scheduled' ? '#dbeafe' : apt.status === 'completed' ? '#d1fae5' : '#fee2e2'}; color: ${apt.status === 'scheduled' ? '#1e40af' : apt.status === 'completed' ? '#065f46' : '#991b1b'}; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                  ${apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
+                </span>
+              </div>
+              <p style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">📅 ${new Date(apt.appointmentDate).toLocaleDateString()} at ${apt.appointmentTime}</p>
+              ${apt.reason ? `<p style="font-size: 14px; color: #374151; margin-top: 8px;">${apt.reason}</p>` : ''}
+            </div>
+            <button onclick="deleteItem(${apt.id})" style="background-color: #fee2e2; color: #991b1b; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;">
+              Delete
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderTasks() {
+      const tasks = getByType('task');
+      const list = document.getElementById('tasks-list');
+      const empty = document.getElementById('tasks-empty');
+      
+      if (tasks.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+      
+      list.style.display = 'grid';
+      empty.style.display = 'none';
+      
+      const sortedTasks = [...tasks].sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        const priorityOrder = { high: 1, medium: 2, low: 3 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      });
+      
+      list.innerHTML = sortedTasks.map(task => `
+        <div class="card" style="background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; border-left: 4px solid ${task.priority === 'high' ? '#ef4444' : task.priority === 'medium' ? '#f59e0b' : '#10b981'}; ${task.completed ? 'opacity: 0.6;' : ''}">
+          <div style="flex: 1; display: flex; align-items: center; gap: 16px;">
+            <input type="checkbox" onchange="toggleTask(${task.id})" ${task.completed ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 16px; font-weight: 600; color: #111827; margin-bottom: 4px; ${task.completed ? 'text-decoration: line-through;' : ''}">${task.taskDescription}</h3>
+              <div style="display: flex; gap: 16px; font-size: 13px; color: #6b7280;">
+                <span style="text-transform: capitalize;">Priority: ${task.priority}</span>
+                <span>Due: ${new Date(task.dueDate).toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+          <button onclick="deleteItem(${task.id})" style="background-color: #fee2e2; color: #991b1b; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;">
+            Delete
+          </button>
+        </div>
+      `).join('');
+    }
+
+    async function toggleTask(id) {
+      const task = allData.find(item => item.id === id);
+      if (task && task.firebaseId) {
+        try {
+          showSyncStatus('syncing');
+          await dataCollection.doc(task.firebaseId).update({
+            completed: !task.completed
+          });
+          showSyncStatus('synced');
+        } catch (error) {
+          console.error('Error updating task:', error);
+          showSyncStatus('error');
+        }
+      }
+    }
+
+    function renderPrescriptions() {
+      const prescriptions = getByType('prescription');
+      const list = document.getElementById('prescriptions-list');
+      const empty = document.getElementById('prescriptions-empty');
+      
+      if (prescriptions.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+      
+      list.style.display = 'grid';
+      empty.style.display = 'none';
+      
+      const sortedPrescriptions = [...prescriptions].sort((a, b) => 
+        new Date(b.prescriptionDate) - new Date(a.prescriptionDate)
+      );
+      
+      list.innerHTML = sortedPrescriptions.map(rx => `
+        <div class="card prescription-pad" style="background-color: white; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 2px solid #1e40af;">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid #1e40af;">
+            <div style="flex: 1;">
+              <h2 style="font-size: 22px; font-weight: 700; color: #1e40af; margin-bottom: 4px;">${settings.clinic_name}</h2>
+              <h3 style="font-size: 18px; font-weight: 600; color: #111827; margin-bottom: 2px;">${settings.doctor_name}</h3>
+              <p style="font-size: 14px; color: #6b7280; margin-bottom: 2px;">${settings.doctor_qualifications}</p>
+              <p style="font-size: 13px; color: #6b7280;">${settings.registration_number}</p>
+            </div>
+            <button onclick="deleteItem(${rx.id})" style="background-color: #fee2e2; color: #991b1b; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;">
+              Delete
+            </button>
+          </div>
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+              <div>
+                <p style="font-size: 13px; color: #6b7280; margin-bottom: 2px;">Patient Name</p>
+                <p style="font-size: 16px; font-weight: 600; color: #111827;">${rx.patientName}</p>
+              </div>
+              <div style="text-align: right;">
+                <p style="font-size: 13px; color: #6b7280; margin-bottom: 2px;">Date</p>
+                <p style="font-size: 16px; font-weight: 600; color: #111827;">${new Date(rx.prescriptionDate).toLocaleDateString()}</p>
+              </div>
+            </div>
+          </div>
+          <div style="margin-bottom: 16px; padding: 12px; background-color: #f9fafb; border-radius: 6px;">
+            <p style="font-size: 13px; color: #6b7280; font-weight: 600; margin-bottom: 6px;">DIAGNOSIS</p>
+            <p style="font-size: 15px; color: #111827;">${rx.diagnosis}</p>
+          </div>
+          <div style="margin-bottom: 16px; padding: 12px; background-color: #f0f9ff; border-radius: 6px; border-left: 3px solid #1e40af;">
+            <p style="font-size: 13px; color: #1e40af; font-weight: 700; margin-bottom: 8px;">℞ PRESCRIPTION</p>
+            <p style="font-size: 15px; color: #111827; white-space: pre-line;">${rx.medicines}</p>
+          </div>
+          ${rx.additionalInstructions ? `
+            <div style="margin-bottom: 16px; padding: 12px; background-color: #fef3c7; border-radius: 6px;">
+              <p style="font-size: 13px; color: #92400e; font-weight: 600; margin-bottom: 6px;">INSTRUCTIONS</p>
+              <p style="font-size: 14px; color: #111827;">${rx.additionalInstructions}</p>
+            </div>
+          ` : ''}
+          <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="font-size: 12px; color: #6b7280;">${settings.prescription_footer}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderMedicines() {
+      const medicines = getByType('medicine');
+      const list = document.getElementById('medicines-list');
+      const empty = document.getElementById('medicines-empty');
+      
+      if (medicines.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+      
+      list.style.display = 'grid';
+      empty.style.display = 'none';
+      
+      list.innerHTML = medicines.map(med => {
+        const isLowStock = med.quantity <= med.reorderLevel;
+        const isExpiringSoon = med.expiryDate ? (new Date(med.expiryDate) - new Date()) < (30 * 24 * 60 * 60 * 1000) : false;
+        
+        return `
+        <div class="card" style="background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); ${isLowStock ? 'border-left: 4px solid #ef4444;' : ''}">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+            <div style="flex: 1;">
+              <h3 style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px;">${med.medicineName}</h3>
+              ${med.genericName ? `<p style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">Generic: ${med.genericName}</p>` : ''}
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+                <span style="background-color: #dbeafe; color: #1e40af; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">${med.category}</span>
+                ${isLowStock ? '<span style="background-color: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">⚠️ Low Stock</span>' : ''}
+                ${isExpiringSoon ? '<span style="background-color: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">⏰ Expiring Soon</span>' : ''}
+              </div>
+            </div>
+            <button onclick="deleteItem(${med.id})" style="background-color: #fee2e2; color: #991b1b; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;">
+              Delete
+            </button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <div>
+              <span style="font-size: 12px; color: #6b7280; font-weight: 600;">In Stock:</span>
+              <p style="font-size: 16px; font-weight: 700; color: #111827; margin-top: 2px;">${med.quantity} units</p>
+            </div>
+            <div>
+              <span style="font-size: 12px; color: #6b7280; font-weight: 600;">Unit Price:</span>
+              <p style="font-size: 16px; font-weight: 700; color: #111827; margin-top: 2px;">₹${parseFloat(med.unitPrice).toFixed(2)}</p>
+            </div>
+            <div>
+              <span style="font-size: 12px; color: #6b7280; font-weight: 600;">Reorder At:</span>
+              <p style="font-size: 16px; font-weight: 700; color: #111827; margin-top: 2px;">${med.reorderLevel} units</p>
+            </div>
+            ${med.expiryDate ? `
+            <div>
+              <span style="font-size: 12px; color: #6b7280; font-weight: 600;">Expires:</span>
+              <p style="font-size: 16px; font-weight: 700; color: #111827; margin-top: 2px;">${new Date(med.expiryDate).toLocaleDateString()}</p>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      `}).join('');
+    }
+
+    function renderInvoices() {
+      const invoices = getByType('invoice');
+      const list = document.getElementById('invoices-list');
+      const empty = document.getElementById('invoices-empty');
+      
+      if (invoices.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = 'block';
+        return;
+      }
+      
+      list.style.display = 'grid';
+      empty.style.display = 'none';
+      
+      const sortedInvoices = [...invoices].sort((a, b) => 
+        new Date(b.invoiceDate) - new Date(a.invoiceDate)
+      );
+      
+      list.innerHTML = sortedInvoices.map(invoice => {
+        const outstanding = invoice.totalAmount - (invoice.amountPaid || 0);
+        return `
+        <div class="card" style="background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">
+                <h3 style="font-size: 18px; font-weight: 700; color: #111827;">${invoice.invoiceNumber}</h3>
+                <span style="background-color: ${invoice.paymentStatus === 'paid' ? '#d1fae5' : invoice.paymentStatus === 'partial' ? '#fef3c7' : '#fee2e2'}; color: ${invoice.paymentStatus === 'paid' ? '#065f46' : invoice.paymentStatus === 'partial' ? '#92400e' : '#991b1b'}; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                  ${invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
+                </span>
+              </div>
+              <p style="font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 4px;">Patient: ${invoice.invoicePatient}</p>
+              <p style="font-size: 13px; color: #6b7280; margin-bottom: 8px;">📅 ${new Date(invoice.invoiceDate).toLocaleDateString()}${invoice.paymentMethod ? ' • ' + invoice.paymentMethod.replace('_', ' ') : ''}</p>
+              <p style="font-size: 14px; color: #374151; margin-bottom: 12px;">${invoice.invoiceDescription}</p>
+              <div style="background-color: #f9fafb; padding: 12px; border-radius: 6px; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="font-size: 13px; color: #6b7280;">Subtotal:</span>
+                  <span style="font-size: 13px; color: #374151;">₹${parseFloat(invoice.subtotal).toFixed(2)}</span>
+                </div>
+                ${invoice.tax > 0 ? `
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 13px; color: #6b7280;">Tax:</span>
+                    <span style="font-size: 13px; color: #374151;">₹${parseFloat(invoice.tax).toFixed(2)}</span>
+                  </div>
+                ` : ''}
+                ${invoice.discount > 0 ? `
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 13px; color: #10b981;">Discount:</span>
+                    <span style="font-size: 13px; color: #10b981;">-₹${parseFloat(invoice.discount).toFixed(2)}</span>
+                  </div>
+                ` : ''}
+                <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid #e5e7eb; margin-top: 8px;">
+                  <span style="font-size: 16px; font-weight: 700; color: #111827;">Total:</span>
+                  <span style="font-size: 20px; font-weight: 700; color: #1e40af;">₹${parseFloat(invoice.totalAmount).toFixed(2)}</span>
+                </div>
+                ${invoice.paymentStatus === 'partial' ? `
+                  <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                    <span style="font-size: 13px; color: #6b7280;">Paid:</span>
+                    <span style="font-size: 13px; font-weight: 600; color: #10b981;">₹${parseFloat(invoice.amountPaid || 0).toFixed(2)}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span style="font-size: 13px; color: #6b7280;">Outstanding:</span>
+                    <span style="font-size: 13px; font-weight: 600; color: #ef4444;">₹${outstanding.toFixed(2)}</span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+            <button onclick="deleteItem(${invoice.id})" style="background-color: #fee2e2; color: #991b1b; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer;">
+              Delete
+            </button>
+          </div>
+          ${invoice.paymentStatus !== 'paid' ? `
+            <div style="padding-top: 12px; border-top: 1px solid #e5e7eb;">
+              <button onclick="markPaid(${invoice.id})" style="background-color: #10b981; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; width: 100%;">
+                Mark as Paid
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `}).join('');
+    }
+
+    async function markPaid(id) {
+      const invoice = allData.find(item => item.id === id);
+      if (invoice && invoice.firebaseId) {
+        try {
+          showSyncStatus('syncing');
+          await dataCollection.doc(invoice.firebaseId).update({
+            paymentStatus: 'paid',
+            amountPaid: invoice.totalAmount,
+            paymentDate: new Date().toISOString()
+          });
+          showSyncStatus('synced');
+          showToast('Invoice marked as paid');
+        } catch (error) {
+          console.error('Error updating invoice:', error);
+          showSyncStatus('error');
+          showToast('Error updating invoice', 'error');
+        }
+      }
+    }
+
+    function renderAnalytics() {
+      const patients = getByType('patient');
+      const appointments = getByType('appointment');
+      const tasks = getByType('task');
+      const medicines = getByType('medicine');
+      const invoices = getByType('invoice');
+      const prescriptions = getByType('prescription');
+
+      document.getElementById('stat-total-patients').textContent = patients.length;
+      
+      const thisMonth = new Date();
+      const monthlyAppointments = appointments.filter(apt => {
+        const aptDate = new Date(apt.appointmentDate);
+        return aptDate.getMonth() === thisMonth.getMonth() && aptDate.getFullYear() === thisMonth.getFullYear();
+      });
+      document.getElementById('stat-monthly-appointments').textContent = monthlyAppointments.length;
+      
+      const totalRevenue = invoices.reduce((sum, inv) => sum + parseFloat(inv.amountPaid || 0), 0);
+      document.getElementById('stat-total-revenue').textContent = '₹' + totalRevenue.toFixed(2);
+      
+      const outstanding = invoices.filter(inv => inv.paymentStatus === 'unpaid' || inv.paymentStatus === 'partial').reduce((sum, inv) => sum + (parseFloat(inv.totalAmount) - parseFloat(inv.amountPaid || 0)), 0);
+      document.getElementById('stat-outstanding').textContent = '₹' + outstanding.toFixed(2);
+      
+      const aptByStatus = appointments.reduce((acc, apt) => {
+        acc[apt.status] = (acc[apt.status] || 0) + 1;
+        return acc;
+      }, {});
+      
+      const aptStatusContainer = document.getElementById('appointments-by-status');
+      const totalApts = appointments.length || 1;
+      aptStatusContainer.innerHTML = Object.entries(aptByStatus).map(([status, count]) => {
+        const percentage = (count / totalApts) * 100;
+        const color = status === 'scheduled' ? '#1e40af' : status === 'completed' ? '#10b981' : '#ef4444';
+        return `
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 14px; color: #374151; font-weight: 600; text-transform: capitalize;">${status}</span>
+              <span style="font-size: 14px; color: #6b7280; font-weight: 600;">${count} (${percentage.toFixed(0)}%)</span>
+            </div>
+            <div style="width: 100%; height: 8px; background-color: #e5e7eb; border-radius: 4px; overflow: hidden;">
+              <div style="width: ${percentage}%; height: 100%; background-color: ${color}; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        `;
+      }).join('') || '<p style="color: #9ca3af; text-align: center;">No appointment data yet</p>';
+      
+      const paymentByStatus = invoices.reduce((acc, inv) => {
+        acc[inv.paymentStatus] = (acc[inv.paymentStatus] || 0) + parseFloat(inv.totalAmount);
+        return acc;
+      }, {});
+      
+      const paymentStatusContainer = document.getElementById('payment-status-chart');
+      const totalAmount = Object.values(paymentByStatus).reduce((sum, val) => sum + val, 0) || 1;
+      paymentStatusContainer.innerHTML = Object.entries(paymentByStatus).map(([status, amount]) => {
+        const percentage = (amount / totalAmount) * 100;
+        const color = status === 'paid' ? '#10b981' : status === 'partial' ? '#f59e0b' : '#ef4444';
+        return `
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 14px; color: #374151; font-weight: 600; text-transform: capitalize;">${status}</span>
+              <span style="font-size: 14px; color: #6b7280; font-weight: 600;">₹${amount.toFixed(2)} (${percentage.toFixed(0)}%)</span>
+            </div>
+            <div style="width: 100%; height: 8px; background-color: #e5e7eb; border-radius: 4px; overflow: hidden;">
+              <div style="width: ${percentage}%; height: 100%; background-color: ${color}; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        `;
+      }).join('') || '<p style="color: #9ca3af; text-align: center;">No billing data yet</p>';
+      
+      const tasksByPriority = tasks.reduce((acc, task) => {
+        if (!task.completed) {
+          acc[task.priority] = (acc[task.priority] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      const tasksPriorityContainer = document.getElementById('tasks-by-priority');
+      const totalTasks = Object.values(tasksByPriority).reduce((sum, val) => sum + val, 0) || 1;
+      tasksPriorityContainer.innerHTML = Object.entries(tasksByPriority).map(([priority, count]) => {
+        const percentage = (count / totalTasks) * 100;
+        const color = priority === 'high' ? '#ef4444' : priority === 'medium' ? '#f59e0b' : '#10b981';
+        return `
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 14px; color: #374151; font-weight: 600; text-transform: capitalize;">${priority} Priority</span>
+              <span style="font-size: 14px; color: #6b7280; font-weight: 600;">${count} tasks (${percentage.toFixed(0)}%)</span>
+            </div>
+            <div style="width: 100%; height: 8px; background-color: #e5e7eb; border-radius: 4px; overflow: hidden;">
+              <div style="width: ${percentage}%; height: 100%; background-color: ${color}; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        `;
+      }).join('') || '<p style="color: #9ca3af; text-align: center;">No pending tasks</p>';
+      
+      const medByCategory = medicines.reduce((acc, med) => {
+        acc[med.category] = (acc[med.category] || 0) + 1;
+        return acc;
+      }, {});
+      
+      const medCategoryContainer = document.getElementById('medicine-by-category');
+      const totalMeds = medicines.length || 1;
+      medCategoryContainer.innerHTML = Object.entries(medByCategory).map(([category, count]) => {
+        const percentage = (count / totalMeds) * 100;
+        return `
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="font-size: 14px; color: #374151; font-weight: 600; text-transform: capitalize;">${category}</span>
+              <span style="font-size: 14px; color: #6b7280; font-weight: 600;">${count} items (${percentage.toFixed(0)}%)</span>
+            </div>
+            <div style="width: 100%; height: 8px; background-color: #e5e7eb; border-radius: 4px; overflow: hidden;">
+              <div style="width: ${percentage}%; height: 100%; background-color: #1e40af; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        `;
+      }).join('') || '<p style="color: #9ca3af; text-align: center;">No inventory data yet</p>';
+      
+      const lowStockMeds = medicines.filter(med => med.quantity <= med.reorderLevel);
+      const expiringMeds = medicines.filter(med => {
+        if (!med.expiryDate) return false;
+        const daysUntilExpiry = (new Date(med.expiryDate) - new Date()) / (1000 * 60 * 60 * 24);
+        return daysUntilExpiry > 0 && daysUntilExpiry <= 30;
+      });
+      
+      const inventoryAlertsContainer = document.getElementById('inventory-alerts');
+      const alerts = [];
+      
+      if (lowStockMeds.length > 0) {
+        alerts.push(`
+          <div style="background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #991b1b; margin-bottom: 8px;">⚠️ Low Stock Alert (${lowStockMeds.length} items)</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              ${lowStockMeds.map(med => `<span style="background-color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; color: #374151;">${med.medicineName} (${med.quantity} left)</span>`).join('')}
+            </div>
+          </div>
+        `);
+      }
+      
+      if (expiringMeds.length > 0) {
+        alerts.push(`
+          <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+            <div style="font-weight: 600; color: #92400e; margin-bottom: 8px;">⏰ Expiring Soon (${expiringMeds.length} items)</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              ${expiringMeds.map(med => `<span style="background-color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; color: #374151;">${med.medicineName} (${new Date(med.expiryDate).toLocaleDateString()})</span>`).join('')}
+            </div>
+          </div>
+        `);
+      }
+      
+      inventoryAlertsContainer.innerHTML = alerts.length > 0 ? alerts.join('') : '<p style="color: #10b981; text-align: center; padding: 20px; font-weight: 600;">✓ All inventory levels are healthy</p>';
+      
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const recentActivity = [];
+      
+      prescriptions.forEach(rx => {
+        const date = new Date(rx.prescriptionDate);
+        if (date >= sevenDaysAgo) {
+          recentActivity.push({ date, type: 'prescription', text: `Prescription issued for ${rx.patientName}`, icon: '📝' });
+        }
+      });
+      
+      appointments.forEach(apt => {
+        const date = new Date(apt.appointmentDate);
+        if (date >= sevenDaysAgo) {
+          recentActivity.push({ date, type: 'appointment', text: `Appointment ${apt.status} for ${apt.patientName}`, icon: '📅' });
+        }
+      });
+      
+      invoices.forEach(inv => {
+        const date = new Date(inv.invoiceDate);
+        if (date >= sevenDaysAgo) {
+          recentActivity.push({ date, type: 'invoice', text: `Invoice created for ${inv.invoicePatient} - ₹${parseFloat(inv.totalAmount).toFixed(2)}`, icon: '💰' });
+        }
+      });
+      
+      recentActivity.sort((a, b) => b.date - a.date);
+      
+      const recentActivityContainer = document.getElementById('recent-activity');
+      recentActivityContainer.innerHTML = recentActivity.slice(0, 10).map(activity => `
+        <div style="display: flex; gap: 16px; padding: 12px; background-color: #f9fafb; border-radius: 8px; align-items: center;">
+          <div style="font-size: 24px;">${activity.icon}</div>
+          <div style="flex: 1;">
+            <div style="font-size: 14px; color: #111827; font-weight: 600;">${activity.text}</div>
+            <div style="font-size: 12px; color: #6b7280; margin-top: 2px;">${activity.date.toLocaleDateString()} at ${activity.date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+          </div>
+        </div>
+      `).join('') || '<p style="color: #9ca3af; text-align: center; padding: 20px;">No recent activity in the last 7 days</p>';
+    }
+
+    function renderAll() {
+      renderPatients();
+      renderAppointments();
+      renderTasks();
+      renderPrescriptions();
+      renderMedicines();
+      renderInvoices();
+      renderAnalytics();
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-button').forEach(b => {
+          b.classList.remove('active');
+          b.style.color = '#6b7280';
+          b.style.borderBottomColor = 'transparent';
+        });
+        btn.classList.add('active');
+        btn.style.color = '#1e40af';
+        btn.style.borderBottomColor = '#1e40af';
+        
+        document.querySelectorAll('.tab-content').forEach(content => {
+          content.style.display = 'none';
+        });
+        document.getElementById(`${btn.dataset.tab}-tab`).style.display = 'block';
+      });
+    });
+
+    // Patient form handlers
+    document.getElementById('add-patient-btn').addEventListener('click', () => {
+      document.getElementById('patient-form').style.display = 'block';
+    });
+
+    document.getElementById('cancel-patient-btn').addEventListener('click', () => {
+      document.getElementById('patient-form').style.display = 'none';
+      document.getElementById('patient-form-element').reset();
+    });
+
+    document.getElementById('patient-form-element').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const patient = {
+        id: Date.now(),
+        __type: 'patient',
+        patientName: document.getElementById('patient-name').value,
+        age: parseInt(document.getElementById('patient-age').value),
+        contact: document.getElementById('patient-contact').value,
+        email: document.getElementById('patient-email').value,
+        address: document.getElementById('patient-address').value,
+        bloodGroup: document.getElementById('patient-blood-group').value,
+        allergies: document.getElementById('patient-allergies').value,
+        notes: document.getElementById('patient-notes').value,
+        lastVisit: new Date().toISOString()
+      };
+      
+      try {
+        showSyncStatus('syncing');
+        await dataCollection.add(patient);
+        showSyncStatus('synced');
+        document.getElementById('patient-form').style.display = 'none';
+        document.getElementById('patient-form-element').reset();
+        showToast('Patient added successfully');
+      } catch (error) {
+        console.error('Error adding patient:', error);
+        showSyncStatus('error');
+        showToast('Error adding patient', 'error');
+      }
+    });
+
+    // Appointment form handlers
+    document.getElementById('add-appointment-btn').addEventListener('click', () => {
+      document.getElementById('appointment-form').style.display = 'block';
+      document.getElementById('appointment-date').valueAsDate = new Date();
+    });
+
+    document.getElementById('cancel-appointment-btn').addEventListener('click', () => {
+      document.getElementById('appointment-form').style.display = 'none';
+      document.getElementById('appointment-form-element').reset();
+    });
+
+    document.getElementById('appointment-form-element').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const appointment = {
+        id: Date.now(),
+        __type: 'appointment',
+        patientName: document.getElementById('appointment-patient').value,
+        appointmentDate: document.getElementById('appointment-date').value,
+        appointmentTime: document.getElementById('appointment-time').value,
+        status: document.getElementById('appointment-status').value,
+        reason: document.getElementById('appointment-reason').value
+      };
+      
+      try {
+        showSyncStatus('syncing');
+        await dataCollection.add(appointment);
+        showSyncStatus('synced');
+        document.getElementById('appointment-form').style.display = 'none';
+        document.getElementById('appointment-form-element').reset();
+        showToast('Appointment scheduled successfully');
+      } catch (error) {
+        console.error('Error adding appointment:', error);
+        showSyncStatus('error');
+        showToast('Error adding appointment', 'error');
+      }
+    });
+
+    // Task form handlers
+    document.getElementById('add-task-btn').addEventListener('click', () => {
+      document.getElementById('task-form').style.display = 'block';
+      document.getElementById('task-due-date').valueAsDate = new Date();
+    });
+
+    document.getElementById('cancel-task-btn').addEventListener('click', () => {
+      document.getElementById('task-form').style.display = 'none';
+      document.getElementById('task-form-element').reset();
+    });
+
+    document.getElementById('task-form-element').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const task = {
+        id: Date.now(),
+        __type: 'task',
+        taskDescription: document.getElementById('task-description').value,
+        priority: document.getElementById('task-priority').value,
+        dueDate: document.getElementById('task-due-date').value,
+        completed: false
+      };
+      
+      try {
+        showSyncStatus('syncing');
+        await dataCollection.add(task);
+        showSyncStatus('synced');
+        document.getElementById('task-form').style.display = 'none';
+        document.getElementById('task-form-element').reset();
+        showToast('Task added successfully');
+      } catch (error) {
+        console.error('Error adding task:', error);
+        showSyncStatus('error');
+        showToast('Error adding task', 'error');
+      }
+    });
+
+    // Prescription form handlers
+    document.getElementById('add-prescription-btn').addEventListener('click', () => {
+      document.getElementById('prescription-form').style.display = 'block';
+      document.getElementById('prescription-date').valueAsDate = new Date();
+    });
+
+    document.getElementById('cancel-prescription-btn').addEventListener('click', () => {
+      document.getElementById('prescription-form').style.display = 'none';
+      document.getElementById('prescription-form-element').reset();
+    });
+
+    document.getElementById('prescription-form-element').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const prescription = {
+        id: Date.now(),
+        __type: 'prescription',
+        patientName: document.getElementById('prescription-patient').value,
+        prescriptionDate: document.getElementById('prescription-date').value,
+        diagnosis: document.getElementById('prescription-diagnosis').value,
+        medicines: document.getElementById('prescription-medicines').value,
+        additionalInstructions: document.getElementById('prescription-instructions').value
+      };
+      
+      try {
+        showSyncStatus('syncing');
+        await dataCollection.add(prescription);
+        showSyncStatus('synced');
+        document.getElementById('prescription-form').style.display = 'none';
+        document.getElementById('prescription-form-element').reset();
+        showToast('Prescription created successfully');
+      } catch (error) {
+        console.error('Error adding prescription:', error);
+        showSyncStatus('error');
+        showToast('Error adding prescription', 'error');
+      }
+    });
+
+    // Medicine form handlers
+    document.getElementById('add-medicine-btn').addEventListener('click', () => {
+      document.getElementById('medicine-form').style.display = 'block';
+    });
+
+    document.getElementById('cancel-medicine-btn').addEventListener('click', () => {
+      document.getElementById('medicine-form').style.display = 'none';
+      document.getElementById('medicine-form-element').reset();
+    });
+
+    document.getElementById('medicine-form-element').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const medicine = {
+        id: Date.now(),
+        __type: 'medicine',
+        medicineName: document.getElementById('medicine-name').value,
+        genericName: document.getElementById('medicine-generic').value,
+        manufacturer: document.getElementById('medicine-manufacturer').value,
+        supplier: document.getElementById('medicine-supplier').value,
+        batchNumber: document.getElementById('medicine-batch').value,
+        quantity: parseInt(document.getElementById('medicine-quantity').value),
+        unitPrice: parseFloat(document.getElementById('medicine-price').value),
+        reorderLevel: parseInt(document.getElementById('medicine-reorder').value),
+        category: document.getElementById('medicine-category').value,
+        manufactureDate: document.getElementById('medicine-manufacture-date').value,
+        expiryDate: document.getElementById('medicine-expiry').value,
+        storageLocation: document.getElementById('medicine-storage').value
+      };
+      
+      try {
+        showSyncStatus('syncing');
+        await dataCollection.add(medicine);
+        showSyncStatus('synced');
+        document.getElementById('medicine-form').style.display = 'none';
+        document.getElementById('medicine-form-element').reset();
+        showToast('Medicine added to inventory');
+      } catch (error) {
+        console.error('Error adding medicine:', error);
+        showSyncStatus('error');
+        showToast('Error adding medicine', 'error');
+      }
+    });
+
+    // Invoice form handlers
+    document.getElementById('add-invoice-btn').addEventListener('click', () => {
+      document.getElementById('invoice-form').style.display = 'block';
+      document.getElementById('invoice-date').valueAsDate = new Date();
+      updateInvoiceTotal();
+    });
+
+    document.getElementById('cancel-invoice-btn').addEventListener('click', () => {
+      document.getElementById('invoice-form').style.display = 'none';
+      document.getElementById('invoice-form-element').reset();
+    });
+
+    function updateInvoiceTotal() {
+      const subtotal = parseFloat(document.getElementById('invoice-subtotal').value) || 0;
+      const tax = parseFloat(document.getElementById('invoice-tax').value) || 0;
+      const discount = parseFloat(document.getElementById('invoice-discount').value) || 0;
+      const total = Math.max(0, subtotal + tax - discount);
+      document.getElementById('invoice-total-display').textContent = '₹' + total.toFixed(2);
+    }
+
+    document.getElementById('invoice-subtotal').addEventListener('input', updateInvoiceTotal);
+    document.getElementById('invoice-tax').addEventListener('input', updateInvoiceTotal);
+    document.getElementById('invoice-discount').addEventListener('input', updateInvoiceTotal);
+
+    document.getElementById('invoice-status').addEventListener('change', (e) => {
+      const partialSection = document.getElementById('partial-payment-section');
+      if (e.target.value === 'partial') {
+        partialSection.style.display = 'block';
+      } else {
+        partialSection.style.display = 'none';
+      }
+    });
+
+    document.getElementById('invoice-form-element').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const subtotal = parseFloat(document.getElementById('invoice-subtotal').value);
+      const tax = parseFloat(document.getElementById('invoice-tax').value) || 0;
+      const discount = parseFloat(document.getElementById('invoice-discount').value) || 0;
+      const totalAmount = Math.max(0, subtotal + tax - discount);
+      const paymentStatus = document.getElementById('invoice-status').value;
+      const amountPaid = paymentStatus === 'partial' ? parseFloat(document.getElementById('invoice-amount-paid').value) || 0 : (paymentStatus === 'paid' ? totalAmount : 0);
+      
+      const invoice = {
+        id: Date.now(),
+        __type: 'invoice',
+        invoiceNumber: document.getElementById('invoice-number').value,
+        invoicePatient: document.getElementById('invoice-patient').value,
+        invoiceDate: document.getElementById('invoice-date').value,
+        invoiceDescription: document.getElementById('invoice-description').value,
+        subtotal: subtotal,
+        tax: tax,
+        discount: discount,
+        totalAmount: totalAmount,
+        paymentStatus: paymentStatus,
+        paymentMethod: document.getElementById('invoice-payment-method').value,
+        paymentDate: paymentStatus === 'paid' ? new Date().toISOString() : '',
+        amountPaid: amountPaid,
+        paymentNotes: ''
+      };
+      
+      try {
+        showSyncStatus('syncing');
+        await dataCollection.add(invoice);
+        showSyncStatus('synced');
+        document.getElementById('invoice-form').style.display = 'none';
+        document.getElementById('invoice-form-element').reset();
+        showToast('Invoice created successfully');
+      } catch (error) {
+        console.error('Error adding invoice:', error);
+        showSyncStatus('error');
+        showToast('Error adding invoice', 'error');
+      }
+    });
+
+    // Initialize - Load settings first
+    loadSettings();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9afe08a3e69c7f8b',t:'MTc2NjA1NDMzOS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
